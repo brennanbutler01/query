@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { fireEvent, render } from '@testing-library/react'
+import { fireEvent, render, renderHook } from '@testing-library/react'
 import * as React from 'react'
 import { ErrorBoundary } from 'react-error-boundary'
 import { queryKey, sleep } from '@tanstack/query-test-utils'
@@ -21,6 +21,41 @@ describe('useQueries', () => {
     queryClient.clear()
     vi.useRealTimers()
   })
+
+  it.each([false, true])(
+    'should combine new selections while unsubscribed (StrictMode: %s)',
+    (strict) => {
+      const key = queryKey()
+      queryClient.setQueryData(key, 2)
+      const combine = (results: Array<QueryObserverResult<number>>) =>
+        results.map((result) => result.data)
+      const view = renderHook(
+        ({ factor }) =>
+          useQueries(
+            {
+              queries: [
+                {
+                  queryKey: key,
+                  queryFn: () => 2,
+                  select: (value: number) => value * factor,
+                },
+              ],
+              subscribed: false,
+              combine,
+            },
+            queryClient,
+          ),
+        {
+          initialProps: { factor: 2 },
+          wrapper: strict ? React.StrictMode : undefined,
+        },
+      )
+      expect(view.result.current).toEqual([4])
+      view.rerender({ factor: 3 })
+      expect(view.result.current).toEqual([6])
+      view.unmount()
+    },
+  )
 
   it('should return the correct states', async () => {
     const key1 = queryKey()

@@ -17,6 +17,30 @@ describe('queriesObserver', () => {
     vi.useRealTimers()
   })
 
+  it('should combine changed optimistic selections before options are committed', () => {
+    const key = queryKey()
+    queryClient.setQueryData(key, 2)
+    const options = { queryKey: key, queryFn: () => 2, enabled: false }
+    const first = [
+      { ...options, select: (value: unknown) => Number(value) * 2 },
+    ]
+    const second = [
+      { ...options, select: (value: unknown) => Number(value) * 3 },
+    ]
+    const combine = vi.fn((results: Array<QueryObserverResult>) =>
+      results.map((result) => result.data),
+    )
+    const observer = new QueriesObserver(queryClient, first, { combine })
+    const [, getFirst] = observer.getOptimisticResult(first, combine)
+    expect(getFirst()).toEqual([4])
+    const [raw, getSecond] = observer.getOptimisticResult(second, combine)
+    expect(raw[0]?.data).toBe(6)
+    expect(getSecond()).toEqual([6])
+    const [, getUnchanged] = observer.getOptimisticResult(second, combine)
+    expect(getUnchanged()).toEqual([6])
+    expect(combine).toHaveBeenCalledTimes(2)
+  })
+
   it('should return an array with all query results', async () => {
     const key1 = queryKey()
     const key2 = queryKey()

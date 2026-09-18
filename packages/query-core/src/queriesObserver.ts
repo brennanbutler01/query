@@ -63,7 +63,7 @@ export class QueriesObserver<
   #observers: Array<QueryObserver>
   #combinedResult!: TCombinedResult
   #lastCombine?: CombineFn<TCombinedResult>
-  #lastResult?: Array<QueryObserverResult>
+  #lastCombinedInput?: Array<QueryObserverResult>
   #lastQueryHashes?: Array<string>
   #observerMatches: Array<QueryObserverMatch> = []
 
@@ -254,7 +254,7 @@ export class QueriesObserver<
     return [
       result,
       (r?: Array<QueryObserverResult>) => {
-        return this.#combineResult(r ?? result, combine, queryHashes)
+        return this.#combineResult(r ?? result, combine, queryHashes, result)
       },
       () => {
         return this.#trackResult(result, matches)
@@ -288,8 +288,17 @@ export class QueriesObserver<
     input: Array<QueryObserverResult>,
     combine: CombineFn<TCombinedResult> | undefined,
     queryHashes?: Array<string>,
+    rawResult: Array<QueryObserverResult> = this.#result,
   ): TCombinedResult {
     if (combine) {
+      // Compare untracked results so memoization does not track every property.
+      const lastInput = this.#lastCombinedInput
+      const inputChanged =
+        !lastInput ||
+        rawResult.length !== lastInput.length ||
+        rawResult.some(
+          (result, index) => !shallowEqualObjects(result, lastInput[index]),
+        )
       const lastHashes = this.#lastQueryHashes
       const queryHashesChanged =
         queryHashes !== undefined &&
@@ -297,13 +306,9 @@ export class QueriesObserver<
         (lastHashes.length !== queryHashes.length ||
           queryHashes.some((hash, i) => hash !== lastHashes[i]))
 
-      if (
-        this.#result !== this.#lastResult ||
-        queryHashesChanged ||
-        combine !== this.#lastCombine
-      ) {
+      if (queryHashesChanged || inputChanged || combine !== this.#lastCombine) {
         this.#lastCombine = combine
-        this.#lastResult = this.#result
+        this.#lastCombinedInput = rawResult
 
         if (queryHashes !== undefined) {
           this.#lastQueryHashes = queryHashes
